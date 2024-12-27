@@ -54,8 +54,8 @@ if user_input:
                 stream.until_done()
                 bot_response = stream.get_final_messages()
                 bot_reply = bot_response[0].content[0].text.value
-        st.chat_message("user", user_input)
-        st.chat_message("assistant", bot_reply)
+        st.chat_message("user").write(user_input)
+        st.chat_message("assistant").write(bot_reply)
     except Exception as e:
         st.error(f"Error: {e}")
 
