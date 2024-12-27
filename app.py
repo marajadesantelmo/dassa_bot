@@ -1,0 +1,63 @@
+import streamlit as st
+from openai import OpenAI
+#from tokens import openai_key 
+from openai import AssistantEventHandler
+from typing_extensions import override
+import os
+
+openai_key = os.getenv('OPENAI_API_KEY')
+
+class EventHandler(AssistantEventHandler):
+    @override    
+    def on_text_created(self, text) -> None:
+        print(f"\nassistant > ", end="", flush=True)
+    @override     
+    def on_text_delta(self, delta, snapshot):
+        print(delta.value, end="", flush=True)
+        
+def on_tool_call_created(self, tool_call):
+  print(f"\nassistant > {tool_call.type}\n", flush=True)
+
+def on_tool_call_delta(self, delta, snapshot):
+  if delta.type == 'code_interpreter':
+    if delta.code_interpreter.input:
+      print(delta.code_interpreter.input, end="", flush=True)
+    if delta.code_interpreter.outputs:
+      print(f"\n\noutput >", flush=True)
+      for output in delta.code_interpreter.outputs:
+        if output.type == "logs":
+          print(f"\n{output.logs}", flush=True)
+
+# Initialize the Streamlit app
+st.title("DASSA Bot")
+
+# Streamlit app layout
+st.write("Hola! Soy DASSA Bot. En qué te puedo ayudar?")
+
+
+client = OpenAI(
+    api_key=openai_key)
+
+user_input = st.text_input("Vos: ", placeholder="Ingresa tu mensaje...")
+if st.button("Enviar"):
+    if user_input.strip(): 
+        try:
+            thread = client.beta.threads.create()
+            message = client.beta.threads.messages.create(
+                    thread_id=thread.id,
+                    role="user",
+                    content=user_input
+                    )
+            with client.beta.threads.runs.stream(
+                thread_id=thread.id,
+                assistant_id='asst_nnDTLYK0nrjuIBJCdscnA6vb',
+                event_handler=EventHandler()) as stream:
+                    stream.until_done()
+                    bot_response = stream.get_final_messages()
+                    bot_reply = bot_response[0].content[0].text.value
+            st.text_area("Bot:", value=bot_reply, height=200, max_chars=None)
+        except Exception as e:
+            st.error(f"Error: {e}")
+    else:
+        st.warning("Please enter a message before sending.")
+
