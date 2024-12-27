@@ -1,9 +1,9 @@
 import streamlit as st
 from openai import OpenAI
-#from tokens import openai_key 
 from openai import AssistantEventHandler
 from typing_extensions import override
 import os
+import re
 
 openai_key = os.getenv('OPENAI_API_KEY')
 
@@ -38,7 +38,7 @@ client = OpenAI(
     api_key=openai_key)
 
 # Initial bot message
-st.chat_message("assistant", avatar="avatar.png").write("Hola! Soy DASSA-Bot. En qué te puedo ayudar? :)")
+st.chat_message("assistant", avatar="avatar.png").write("Hola! Soy DASSA-Bot. En qué te puedo ayudar? 🤖")
 
 user_input = st.chat_input("Ingresa tu mensaje...")
 
@@ -57,6 +57,7 @@ if user_input:
                 stream.until_done()
                 bot_response = stream.get_final_messages()
                 bot_reply = bot_response[0].content[0].text.value
+                bot_reply = re.sub(r"【.*?】", "", bot_reply)
         st.chat_message("user").write(user_input)
         st.chat_message("assistant", avatar="avatar.png").write(bot_reply)
     except Exception as e:
