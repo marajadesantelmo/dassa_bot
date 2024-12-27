@@ -28,9 +28,7 @@ def on_tool_call_delta(self, delta, snapshot):
         if output.type == "logs":
           print(f"\n{output.logs}", flush=True)
 
-# Initialize the Streamlit app
-st.title("DASSA Bot")
-col_logo, col_title = st.columns([5, 1])
+col_title, col_logo = st.columns([5, 1])
 with col_title:
   st.title("DASSA Bot")
 with col_logo:
