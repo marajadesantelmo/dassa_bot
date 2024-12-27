@@ -42,9 +42,6 @@ st.chat_message("assistant", avatar="avatar.png").write("Hola! Soy DASSA-Bot. En
 
 user_input = st.chat_input("Ingresa tu mensaje...")
 
-# Store messages in a list
-messages = []
-
 if user_input:
     try:
         thread = client.beta.threads.create()
@@ -61,14 +58,8 @@ if user_input:
                 bot_response = stream.get_final_messages()
                 bot_reply = bot_response[0].content[0].text.value
                 bot_reply = re.sub(r"【.*?】", "", bot_reply)
-        
-        # Append user and bot messages to the list
-        messages.append(("user", user_input))
-        messages.append(("assistant", bot_reply))
-        
-        # Display all messages
-        for role, content in messages:
-            st.chat_message(role, avatar="avatar.png" if role == "assistant" else None).write(content)
+        st.chat_message("user").write(user_input)
+        st.chat_message("assistant", avatar="avatar.png").write(bot_reply)
     except Exception as e:
         st.error(f"Error: {e}")
 
