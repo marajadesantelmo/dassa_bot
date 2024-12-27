@@ -34,11 +34,11 @@ with col_title:
 with col_logo:
   st.image('logo.png')
 
-# Streamlit app layout
-st.write("Hola! Soy DASSA Bot. En qué te puedo ayudar?")
-
 client = OpenAI(
     api_key=openai_key)
+
+# Initial bot message
+st.chat_message("assistant", avatar="avatar.png").write("Hola! Soy DASSA-Bot. En qué te puedo ayudar? :)")
 
 user_input = st.chat_input("Ingresa tu mensaje...")
 
