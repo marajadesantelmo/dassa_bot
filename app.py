@@ -30,6 +30,11 @@ def on_tool_call_delta(self, delta, snapshot):
 
 # Initialize the Streamlit app
 st.title("DASSA Bot")
+col_logo, col_title = st.columns([5, 1])
+with col_title:
+  st.title("DASSA Bot")
+with col_logo:
+  st.image('logo.png')
 
 # Streamlit app layout
 st.write("Hola! Soy DASSA Bot. En qué te puedo ayudar?")
@@ -55,7 +60,7 @@ if user_input:
                 bot_response = stream.get_final_messages()
                 bot_reply = bot_response[0].content[0].text.value
         st.chat_message("user").write(user_input)
-        st.chat_message("assistant").write(bot_reply)
+        st.chat_message("assistant", avatar="avatar.png").write(bot_reply)
     except Exception as e:
         st.error(f"Error: {e}")
 
