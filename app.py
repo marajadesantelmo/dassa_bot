@@ -276,42 +276,70 @@ if user_input:
 if st.session_state.finished:    
     # Crear DataFrame y archivo Excel con datos a nivel de producto
     if st.session_state.processed_products:
-        df = pd.DataFrame(st.session_state.processed_products)
-        
-        # Crear buffer de bytes para el archivo Excel
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Productos')
-        excel_data = excel_buffer.getvalue()
-        
-        # Mostrar enlace de descarga
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": "Aquí está el archivo Excel con todos los productos de las facturas procesadas:", 
-            "avatar": "avatar.png"
-        })
-        st.chat_message("assistant", avatar="avatar.png").write("Aquí está el archivo Excel con todos los productos de las facturas procesadas:")
-        
-        # Mostrar DataFrame en chat
-        st.dataframe(df)
-        
-        # Enlace de descarga
-        st.download_button(
-            label="Descargar Excel de Productos",
-            data=excel_data,
-            file_name="productos_facturas.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        
-        # Botón para reiniciar
-        if st.button("Procesar nuevas facturas"):
-            st.session_state.processed_invoices = []
-            st.session_state.processed_products = []
-            st.session_state.finished = False
-            st.session_state.messages = [
-                {"role": "assistant", "content": "¡Hola! Soy DASSA-Bot. Sube una factura en PDF para procesarla. 🤖", "avatar": "avatar.png"}
-            ]
-            st.experimental_rerun()
+        try:
+            df = pd.DataFrame(st.session_state.processed_products)
+            
+            # Crear buffer de bytes para el archivo Excel
+            excel_buffer = io.BytesIO()
+            
+            # Escribir datos al Excel y asegurarse de que se cierra adecuadamente
+            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='Productos')
+                writer.close()  # Asegurar que el escritor se cierra correctamente
+            
+            # Importante: resetear la posición del buffer antes de leer su valor
+            excel_buffer.seek(0)
+            excel_data = excel_buffer.getvalue()
+            
+            # Mostrar enlace de descarga
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": "Aquí está el archivo Excel con todos los productos de las facturas procesadas:", 
+                "avatar": "avatar.png"
+            })
+            st.chat_message("assistant", avatar="avatar.png").write("Aquí está el archivo Excel con todos los productos de las facturas procesadas:")
+            
+            # Mostrar DataFrame en chat
+            st.dataframe(df)
+            
+            # Enlace de descarga con nombre de archivo que incluye timestamp para evitar conflictos
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                label="Descargar Excel de Productos",
+                data=excel_data,
+                file_name=f"productos_facturas_{timestamp}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+            # Botón para reiniciar
+            if st.button("Procesar nuevas facturas"):
+                st.session_state.processed_invoices = []
+                st.session_state.processed_products = []
+                st.session_state.finished = False
+                st.session_state.messages = [
+                    {"role": "assistant", "content": "¡Hola! Soy DASSA-Bot. Sube una factura en PDF para procesarla. 🤖", "avatar": "avatar.png"}
+                ]
+                st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Error al generar el archivo Excel: {e}")
+            import traceback
+            st.error(traceback.format_exc())
+            
+            # Ofrecer alternativa para descargar CSV en caso de error con Excel
+            try:
+                csv_buffer = io.StringIO()
+                df.to_csv(csv_buffer, index=False)
+                csv_buffer.seek(0)
+                
+                st.download_button(
+                    label="Descargar CSV (Alternativa)",
+                    data=csv_buffer.getvalue(),
+                    file_name="productos_facturas.csv",
+                    mime="text/csv"
+                )
+            except Exception as csv_error:
+                st.error(f"También falló la generación de CSV: {csv_error}")
     else:
         st.warning("No se procesaron facturas.")
         # Botón para reiniciar
