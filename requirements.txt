@@ -1,3 +1,4 @@
 openai
 typing_extensions
 PyPDF2
+xlsxwriter

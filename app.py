@@ -88,7 +88,7 @@ if 'processed_products' not in st.session_state:
     st.session_state.processed_products = []
 
 if 'conversation_started' not in st.session_state:
-    st.session_state.conversation_started = False
+    st.session_state.conversation_started = True  # Set to True by default to show upload option immediately
     
 if 'asking_for_more' not in st.session_state:
     st.session_state.asking_for_more = False
@@ -99,7 +99,7 @@ if 'finished' not in st.session_state:
 # Mostrar mensajes de chat anteriores
 if 'messages' not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "¡Hola! Soy DASSA-Bot. ¿Deseas procesar una factura en PDF? 🤖", "avatar": "avatar.png"}
+        {"role": "assistant", "content": "¡Hola! Soy DASSA-Bot. Sube una factura en PDF para procesarla. 🤖", "avatar": "avatar.png"}
     ]
 
 for message in st.session_state.messages:
@@ -108,85 +108,8 @@ for message in st.session_state.messages:
 # Entrada del usuario
 user_input = st.chat_input("Ingresa tu mensaje...")
 
-# Procesar la entrada del usuario
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    st.chat_message("user").write(user_input)
-    
-    if not st.session_state.conversation_started:
-        st.session_state.conversation_started = True
-        response = "Perfecto, por favor sube un archivo PDF de factura para procesar."
-        st.session_state.messages.append({"role": "assistant", "content": response, "avatar": "avatar.png"})
-        st.chat_message("assistant", avatar="avatar.png").write(response)
-        
-    elif st.session_state.asking_for_more:
-        if any(word in user_input.lower() for word in ["sí", "si", "claro", "ok", "otra", "más"]):
-            response = "Excelente, por favor sube otra factura."
-            st.session_state.asking_for_more = False
-            st.session_state.messages.append({"role": "assistant", "content": response, "avatar": "avatar.png"})
-            st.chat_message("assistant", avatar="avatar.png").write(response)
-        else:
-            st.session_state.finished = True
-            
-            # Crear DataFrame y archivo Excel con datos a nivel de producto
-            if st.session_state.processed_products:
-                df = pd.DataFrame(st.session_state.processed_products)
-                
-                # Crear buffer de bytes para el archivo Excel
-                excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Productos')
-                excel_data = excel_buffer.getvalue()
-                
-                # Mostrar enlace de descarga
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": "Aquí está el archivo Excel con todos los productos de las facturas procesadas:", 
-                    "avatar": "avatar.png"
-                })
-                st.chat_message("assistant", avatar="avatar.png").write("Aquí está el archivo Excel con todos los productos de las facturas procesadas:")
-                
-                # Mostrar DataFrame en chat
-                st.dataframe(df)
-                
-                # Enlace de descarga
-                st.download_button(
-                    label="Descargar Excel de Productos",
-                    data=excel_data,
-                    file_name="productos_facturas.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                response = "No se procesaron facturas. ¿Deseas intentar de nuevo?"
-                st.session_state.messages.append({"role": "assistant", "content": response, "avatar": "avatar.png"})
-                st.chat_message("assistant", avatar="avatar.png").write(response)
-                st.session_state.conversation_started = False
-                st.session_state.asking_for_more = False
-                st.session_state.finished = False
-    else:
-        try:
-            thread = client.beta.threads.create()
-            message = client.beta.threads.messages.create(
-                thread_id=thread.id,
-                role="user",
-                content=user_input
-            )
-            with client.beta.threads.runs.stream(
-                thread_id=thread.id,
-                assistant_id='asst_nnDTLYK0nrjuIBJCdscnA6vb',
-                event_handler=EventHandler()) as stream:
-                    stream.until_done()
-                    bot_response = stream.get_final_messages()
-                    bot_reply = bot_response[0].content[0].text.value
-                    bot_reply = re.sub(r"【.*?】", "", bot_reply)
-            
-            st.session_state.messages.append({"role": "assistant", "content": bot_reply, "avatar": "avatar.png"})
-            st.chat_message("assistant", avatar="avatar.png").write(bot_reply)
-        except Exception as e:
-            st.error(f"Error: {e}")
-            
-# Subida de archivos
-if st.session_state.conversation_started and not st.session_state.asking_for_more and not st.session_state.finished:
+# Subida de archivos - Mostrar siempre la opción de subir archivo si no estamos en estado de asking_for_more o finished
+if not st.session_state.asking_for_more and not st.session_state.finished:
     pdf_file = st.file_uploader("Sube una factura en PDF", type=["pdf"], key=f"pdf_uploader_{len(st.session_state.processed_invoices)}")
     
     if pdf_file is not None:
@@ -254,31 +177,150 @@ if st.session_state.conversation_started and not st.session_state.asking_for_mor
                     # Mostrar el DataFrame
                     st.dataframe(df_products)
                     
-                    # Preguntar si desea agregar otra factura
-                    st.session_state.messages.append({
-                        "role": "assistant", 
-                        "content": "¿Deseas agregar otra factura?", 
-                        "avatar": "avatar.png"
-                    })
-                    st.chat_message("assistant", avatar="avatar.png").write("¿Deseas agregar otra factura?")
+                    # Crear botones para continuar o finalizar
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("Agregar otra factura"):
+                            st.session_state.messages.append({
+                                "role": "assistant", 
+                                "content": "Puedes subir otra factura.", 
+                                "avatar": "avatar.png"
+                            })
+                            st.experimental_rerun()
+                    
+                    with col2:
+                        if st.button("Finalizar y exportar"):
+                            st.session_state.finished = True
+                            st.experimental_rerun()
                 else:
                     # Si no se puede extraer JSON válido
                     st.session_state.messages.append({
                         "role": "assistant", 
-                        "content": f"He analizado la factura pero no pude estructurar la información correctamente.\n\n{invoice_data_json}\n\n¿Deseas agregar otra factura?", 
+                        "content": f"He analizado la factura pero no pude estructurar la información correctamente.\n\n{invoice_data_json}", 
                         "avatar": "avatar.png"
                     })
-                    st.chat_message("assistant", avatar="avatar.png").write(f"He analizado la factura pero no pude estructurar la información correctamente.\n\n{invoice_data_json}\n\n¿Deseas agregar otra factura?")
+                    st.chat_message("assistant", avatar="avatar.png").write(f"He analizado la factura pero no pude estructurar la información correctamente.\n\n{invoice_data_json}")
                     st.session_state.processed_invoices.append({"Datos": invoice_data_json})
+                    
+                    # Crear botones para continuar o finalizar
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("Agregar otra factura"):
+                            st.session_state.messages.append({
+                                "role": "assistant", 
+                                "content": "Puedes subir otra factura.", 
+                                "avatar": "avatar.png"
+                            })
+                            st.experimental_rerun()
+                    
+                    with col2:
+                        if st.button("Finalizar y exportar"):
+                            st.session_state.finished = True
+                            st.experimental_rerun()
             except Exception as e:
                 st.warning(f"No se pudo extraer JSON estructurado: {e}")
                 st.session_state.messages.append({
                     "role": "assistant", 
-                    "content": f"Ocurrió un error al procesar la factura: {str(e)}\n\n¿Deseas agregar otra factura?", 
+                    "content": f"Ocurrió un error al procesar la factura: {str(e)}", 
                     "avatar": "avatar.png"
                 })
-                st.chat_message("assistant", avatar="avatar.png").write(f"Ocurrió un error al procesar la factura: {str(e)}\n\n¿Deseas agregar otra factura?")
+                st.chat_message("assistant", avatar="avatar.png").write(f"Ocurrió un error al procesar la factura: {str(e)}")
                 st.session_state.processed_invoices.append({"Datos": invoice_data_json})
-            
-            st.session_state.asking_for_more = True
+                
+                # Crear botones para continuar o finalizar
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("Agregar otra factura"):
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": "Puedes subir otra factura.", 
+                            "avatar": "avatar.png"
+                        })
+                        st.experimental_rerun()
+                
+                with col2:
+                    if st.button("Finalizar y exportar"):
+                        st.session_state.finished = True
+                        st.experimental_rerun()
+
+# Procesar la entrada del usuario
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.chat_message("user").write(user_input)
+    
+    try:
+        thread = client.beta.threads.create()
+        message = client.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=user_input
+        )
+        with client.beta.threads.runs.stream(
+            thread_id=thread.id,
+            assistant_id='asst_nnDTLYK0nrjuIBJCdscnA6vb',
+            event_handler=EventHandler()) as stream:
+                stream.until_done()
+                bot_response = stream.get_final_messages()
+                bot_reply = bot_response[0].content[0].text.value
+                bot_reply = re.sub(r"【.*?】", "", bot_reply)
+        
+        st.session_state.messages.append({"role": "assistant", "content": bot_reply, "avatar": "avatar.png"})
+        st.chat_message("assistant", avatar="avatar.png").write(bot_reply)
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+# Si ya terminamos de procesar, mostrar el Excel
+if st.session_state.finished:    
+    # Crear DataFrame y archivo Excel con datos a nivel de producto
+    if st.session_state.processed_products:
+        df = pd.DataFrame(st.session_state.processed_products)
+        
+        # Crear buffer de bytes para el archivo Excel
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Productos')
+        excel_data = excel_buffer.getvalue()
+        
+        # Mostrar enlace de descarga
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": "Aquí está el archivo Excel con todos los productos de las facturas procesadas:", 
+            "avatar": "avatar.png"
+        })
+        st.chat_message("assistant", avatar="avatar.png").write("Aquí está el archivo Excel con todos los productos de las facturas procesadas:")
+        
+        # Mostrar DataFrame en chat
+        st.dataframe(df)
+        
+        # Enlace de descarga
+        st.download_button(
+            label="Descargar Excel de Productos",
+            data=excel_data,
+            file_name="productos_facturas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        # Botón para reiniciar
+        if st.button("Procesar nuevas facturas"):
+            st.session_state.processed_invoices = []
+            st.session_state.processed_products = []
+            st.session_state.finished = False
+            st.session_state.messages = [
+                {"role": "assistant", "content": "¡Hola! Soy DASSA-Bot. Sube una factura en PDF para procesarla. 🤖", "avatar": "avatar.png"}
+            ]
+            st.experimental_rerun()
+    else:
+        st.warning("No se procesaron facturas.")
+        # Botón para reiniciar
+        if st.button("Procesar facturas"):
+            st.session_state.processed_invoices = []
+            st.session_state.processed_products = []
+            st.session_state.finished = False
+            st.session_state.messages = [
+                {"role": "assistant", "content": "¡Hola! Soy DASSA-Bot. Sube una factura en PDF para procesarla. 🤖", "avatar": "avatar.png"}
+            ]
+            st.experimental_rerun()
 
