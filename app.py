@@ -7,6 +7,7 @@ import re
 import pandas as pd
 import PyPDF2
 import io
+from io import BytesIO
 import json
 try:
   from tokens import openai_key
@@ -41,19 +42,68 @@ def extract_text_from_pdf(pdf_file):
         text += page.extract_text() or ""
     return text
 
+def extract_and_fix_json(text):
+    """Extract JSON from text and fix common formatting issues."""
+    # Try to find JSON pattern in the text
+    json_match = re.search(r'\{.*\}', text, re.DOTALL)
+    
+    if not json_match:
+        return None
+    
+    json_str = json_match.group()
+    
+    # Fix common JSON formatting issues
+    # 1. Fix single quotes to double quotes
+    json_str = re.sub(r"(?<!\\')'([^']*)'(?!\\')", r'"\1"', json_str)
+    
+    # 2. Ensure property names have double quotes
+    json_str = re.sub(r'(\s*)([a-zA-Z0-9_]+)(\s*):(\s*)', r'\1"\2"\3:\4', json_str)
+    
+    # 3. Replace trailing commas before closing brackets
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+    
+    try:
+        # Attempt to parse the JSON
+        json_obj = json.loads(json_str)
+        return json_obj
+    except json.JSONDecodeError as e:
+        st.warning(f"Error al parsear JSON: {e}. Intentando método alternativo...")
+        
+        # If standard parsing fails, try a more aggressive approach
+        try:
+            # Use a third-party JSON parser that's more forgiving (simulating with manual fixes)
+            # Replace single quotes with double quotes (but not escaped ones)
+            json_str = json_str.replace("'", '"').replace('\\"', "'")
+            
+            # Fix missing quotes around property names
+            json_str = re.sub(r'([{,]\s*)([a-zA-Z0-9_]+)(\s*:)', r'\1"\2"\3', json_str)
+            
+            return json.loads(json_str)
+        except Exception:
+            return None
+
 def process_invoice_with_ai(client, pdf_text):
     thread = client.beta.threads.create()
     message = client.beta.threads.messages.create(
         thread_id=thread.id,
         role="user",
-        content=f"""Extraé la siguiente información de esta factura en formato JSON: 
-        {{'Fecha': '...', 'Número de Factura': '...', 'CUIT Emisor': '...', 
-        'Cliente': '...', 'Importe Total': '...', 'IVA': '...', 
-        'Detalle de Productos': [
-            {{'Descripción': '...', 'Cantidad': '...', 'Precio Unitario': '...', 'Subtotal': '...'}}
-        ]}}
+        content=f"""Extraé la siguiente información de esta factura en formato JSON válido: 
+        {{
+        "Fecha": "...", 
+        "Número de Factura": "...", 
+        "CUIT Emisor": "...", 
+        "Cliente": "...", 
+        "Importe Total": "...", 
+        "IVA": "...", 
+        "Detalle de Productos": [
+            {{"Descripción": "...", "Cantidad": "...", "Precio Unitario": "...", "Subtotal": "..."}}
+        ]
+        }}
         
-        Es muy importante que 'Detalle de Productos' sea un array de objetos con la información de cada producto.
+        Es muy importante que:
+        1. El formato sea JSON válido con comillas dobles para las claves
+        2. 'Detalle de Productos' sea un array de objetos con la información de cada producto
+        3. No agregues comentarios ni texto adicional en la respuesta, solo el JSON
         
         El texto de la factura es: 
         {pdf_text}"""
@@ -122,11 +172,10 @@ if not st.session_state.asking_for_more and not st.session_state.finished:
             
             # Parsear los datos JSON
             try:
-                # Intentar extraer el JSON de la respuesta del bot
-                json_match = re.search(r'\{.*\}', invoice_data_json, re.DOTALL)
-                if json_match:
-                    invoice_dict = json.loads(json_match.group())
-                    
+                # Usar nuestra función mejorada de extracción de JSON
+                invoice_dict = extract_and_fix_json(invoice_data_json)
+                
+                if invoice_dict:
                     # Extraer productos y agregar información del encabezado a cada producto
                     products = []
                     if 'Detalle de Productos' in invoice_dict and isinstance(invoice_dict['Detalle de Productos'], list):
@@ -221,12 +270,14 @@ if not st.session_state.asking_for_more and not st.session_state.finished:
                             st.experimental_rerun()
             except Exception as e:
                 st.warning(f"No se pudo extraer JSON estructurado: {e}")
+                # Mostrar el texto original para depuración
                 st.session_state.messages.append({
                     "role": "assistant", 
-                    "content": f"Ocurrió un error al procesar la factura: {str(e)}", 
+                    "content": f"Ocurrió un error al procesar la factura: {str(e)}\n\nRespuesta original: {invoice_data_json[:500]}...",
                     "avatar": "avatar.png"
                 })
                 st.chat_message("assistant", avatar="avatar.png").write(f"Ocurrió un error al procesar la factura: {str(e)}")
+                st.code(invoice_data_json, language="json")  # Mostrar como código para mejor visualización
                 st.session_state.processed_invoices.append({"Datos": invoice_data_json})
                 
                 # Crear botones para continuar o finalizar
