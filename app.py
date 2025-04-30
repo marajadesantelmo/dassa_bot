@@ -282,14 +282,12 @@ if st.session_state.finished:
             # Crear buffer de bytes para el archivo Excel
             excel_buffer = io.BytesIO()
             
-            # Escribir datos al Excel y asegurarse de que se cierra adecuadamente
+            # Escribir datos al Excel
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                 df.to_excel(writer, index=False, sheet_name='Productos')
-                writer.close()  # Asegurar que el escritor se cierra correctamente
             
-            # Importante: resetear la posición del buffer antes de leer su valor
+            # Resetear la posición del buffer antes de leer su valor
             excel_buffer.seek(0)
-            excel_data = excel_buffer.getvalue()
             
             # Mostrar enlace de descarga
             st.session_state.messages.append({
@@ -302,12 +300,12 @@ if st.session_state.finished:
             # Mostrar DataFrame en chat
             st.dataframe(df)
             
-            # Enlace de descarga con nombre de archivo que incluye timestamp para evitar conflictos
+            # Enlace de descarga con nombre de archivo que incluye timestamp
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             st.download_button(
                 label="Descargar Excel de Productos",
-                data=excel_data,
+                data=excel_buffer,
                 file_name=f"productos_facturas_{timestamp}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
@@ -323,9 +321,6 @@ if st.session_state.finished:
                 st.experimental_rerun()
         except Exception as e:
             st.error(f"Error al generar el archivo Excel: {e}")
-            import traceback
-            st.error(traceback.format_exc())
-            
             # Ofrecer alternativa para descargar CSV en caso de error con Excel
             try:
                 csv_buffer = io.StringIO()
