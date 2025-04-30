@@ -277,17 +277,38 @@ if st.session_state.finished:
     # Crear DataFrame y archivo Excel con datos a nivel de producto
     if st.session_state.processed_products:
         try:
+            # Create DataFrame from processed products
             df = pd.DataFrame(st.session_state.processed_products)
             
-            # Crear buffer de bytes para el archivo Excel
-            excel_buffer = io.BytesIO()
+            # Function to create Excel file with multiple sheets if needed
+            def to_excel(df):
+                output = BytesIO()
+                writer = pd.ExcelWriter(output, engine='xlsxwriter')
+                
+                # Write dataframe to the Excel
+                df.to_excel(writer, sheet_name='Productos', index=False)
+                
+                # Configure formatting if needed
+                workbook = writer.book
+                worksheet = writer.sheets['Productos']
+                
+                # Adjust column widths
+                for idx, col in enumerate(df.columns):
+                    max_len = max(
+                        df[col].astype(str).map(len).max(),
+                        len(str(col))
+                    ) + 2
+                    worksheet.set_column(idx, idx, max_len)
+                
+                # Close the writer explicitly
+                writer.close()
+                
+                # Get the processed data
+                output.seek(0)  # Important: reset pointer
+                return output.getvalue()
             
-            # Escribir datos al Excel
-            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name='Productos')
-            
-            # Resetear la posición del buffer antes de leer su valor
-            excel_buffer.seek(0)
+            # Generate Excel data
+            excel_data = to_excel(df)
             
             # Mostrar enlace de descarga
             st.session_state.messages.append({
@@ -305,7 +326,7 @@ if st.session_state.finished:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             st.download_button(
                 label="Descargar Excel de Productos",
-                data=excel_buffer,
+                data=excel_data,
                 file_name=f"productos_facturas_{timestamp}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
@@ -321,15 +342,16 @@ if st.session_state.finished:
                 st.experimental_rerun()
         except Exception as e:
             st.error(f"Error al generar el archivo Excel: {e}")
+            import traceback
+            st.error(traceback.format_exc())
+            
             # Ofrecer alternativa para descargar CSV en caso de error con Excel
             try:
-                csv_buffer = io.StringIO()
-                df.to_csv(csv_buffer, index=False)
-                csv_buffer.seek(0)
+                csv_data = df.to_csv(index=False).encode('utf-8')
                 
                 st.download_button(
                     label="Descargar CSV (Alternativa)",
-                    data=csv_buffer.getvalue(),
+                    data=csv_data,
                     file_name="productos_facturas.csv",
                     mime="text/csv"
                 )
